@@ -9,13 +9,12 @@ pub struct ValueScanner {
 }
 
 impl ValueScanner {
-    pub fn reset(&mut self) -> &mut Self {
+    pub fn reset(&mut self) {
         self.matches.clear();
         self.mem_map.clear();
-        self
     }
 
-    pub fn scan_for<T: VirtualMemory>(&mut self, mem: &mut T, data: &[u8]) -> Result<&mut Self> {
+    pub fn scan_for<T: VirtualMemory>(&mut self, mem: &mut T, data: &[u8]) -> Result<()> {
         if self.matches.is_empty() {
             self.mem_map =
                 mem.virt_page_map_range(size::mb(16), Address::null(), (1u64 << 47).into());
@@ -38,10 +37,10 @@ impl ValueScanner {
         } else {
         }
 
-        Ok(self)
+        Ok(())
     }
 
-    pub fn matches<'a>(&'a self) -> impl 'a + Iterator<Item = Address> {
-        self.matches.iter().cloned()
+    pub fn matches(&self) -> &Vec<Address> {
+        &self.matches
     }
 }
