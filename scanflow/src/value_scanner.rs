@@ -35,6 +35,15 @@ impl ValueScanner {
                 }
             }
         } else {
+            let mut buf = vec![0; data.len()];
+            let mut old_matches = std::mem::replace(&mut self.matches, vec![]);
+            for a in old_matches.into_iter() {
+                mem.virt_read_raw_into(a, buf.as_mut_slice()).data_part()?;
+
+                if buf == data {
+                    self.matches.push(a);
+                }
+            }
         }
 
         Ok(())
