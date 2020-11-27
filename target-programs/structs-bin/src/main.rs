@@ -13,6 +13,7 @@ pub struct Account {
 
 impl Account {
     pub fn do_operation(&mut self) {
+        println!("Account {:?}", self as *const _);
         self.accessed += 1;
         if (self.accessed % 10) != 0 {
             self.money -= 1;
@@ -30,13 +31,14 @@ pub struct State {
 
 impl State {
     pub fn tick(&mut self) {
+        println!("State {:?}", self as *const _);
         self.tick += 1;
         self.account.do_operation();
     }
 }
 
 lazy_static! {
-    static ref GLOBAL_STATE: Mutex<Option<State>> = Mutex::new(None);
+    static ref GLOBAL_STATE: Mutex<Option<Box<State>>> = Mutex::new(None);
 }
 
 fn main() {
@@ -46,17 +48,22 @@ fn main() {
     io::stdin().lock().read_line(&mut name).unwrap();
     name = name.trim().to_string();
 
-    *GLOBAL_STATE.lock().unwrap() = Some(State {
+    *GLOBAL_STATE.lock().unwrap() = Some(Box::new(State {
         tick: 0,
         account: Box::new(Account {
             name,
             money: 100,
             accessed: 0,
         }),
-    });
+    }));
 
     loop {
-        println!("{:#?}", &GLOBAL_STATE.lock().unwrap());
+        {
+            let gs: &Mutex<_> = &GLOBAL_STATE;
+            let p = gs as *const _;
+            let r = &GLOBAL_STATE.lock().unwrap();
+            println!("{:#?}@{:?}", r, p);
+        }
         let mut reader = io::stdin();
         reader.read(&mut [0; 10]).unwrap();
         GLOBAL_STATE.lock().unwrap().as_mut().unwrap().tick();
