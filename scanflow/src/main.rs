@@ -12,6 +12,9 @@ use std::convert::TryInto;
 mod value_scanner;
 use value_scanner::ValueScanner;
 
+mod pointer_map;
+use pointer_map::PointerMap;
+
 fn main() -> Result<()> {
     TermLogger::init(LevelFilter::Info, Config::default(), TerminalMode::Mixed).unwrap();
 
@@ -54,6 +57,15 @@ fn main() -> Result<()> {
                 } else {
                     println!("Perform a scan first!");
                 }
+            }
+            "pointer_map" | "pm" => {
+                let mut pointer_map = PointerMap::default();
+                pointer_map.create_map(
+                    &mut process.virt_mem,
+                    process.proc_info.proc_arch.size_addr(),
+                )?;
+                let addr = 0x4f8040.into();
+                pointer_map.walk_down_range(addr, 0, 16, 0, 5);
             }
             line => {
                 if let Some((buf, t)) = parse_input(line, &typename) {
