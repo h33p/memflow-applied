@@ -1,5 +1,5 @@
 use memflow::error::*;
-use memflow::mem::{VirtualMemory, VirtualReadData};
+use memflow::mem::{VirtualMemory};
 use memflow::types::{size, Address};
 
 #[derive(Default)]
@@ -36,7 +36,7 @@ impl ValueScanner {
             }
         } else {
             let mut buf = vec![0; data.len()];
-            let mut old_matches = std::mem::replace(&mut self.matches, vec![]);
+            let old_matches = std::mem::replace(&mut self.matches, vec![]);
             for a in old_matches.into_iter() {
                 mem.virt_read_raw_into(a, buf.as_mut_slice()).data_part()?;
 

@@ -1,6 +1,6 @@
 use memflow::connector::inventory::ConnectorInventory;
 use memflow::error::*;
-use memflow::mem::virt_mem::{VirtualMemory, VirtualReadData};
+use memflow::mem::virt_mem::{VirtualMemory};
 
 use memflow_win32::win32::{Kernel, Win32Process};
 use memflow_win32::{Error, Result};

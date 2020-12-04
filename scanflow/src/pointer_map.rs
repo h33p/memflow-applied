@@ -1,5 +1,5 @@
 use memflow::error::*;
-use memflow::mem::{VirtualMemory, VirtualReadData};
+use memflow::mem::{VirtualMemory};
 use memflow::types::{size, Address};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;

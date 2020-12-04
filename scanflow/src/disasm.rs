@@ -1,4 +1,4 @@
-use memflow::mem::{VirtualMemory, VirtualReadData};
+use memflow::mem::{VirtualMemory};
 use memflow::types::{size, Address};
 use memflow_win32::error::*;
 use memflow_win32::win32::Win32Process;
