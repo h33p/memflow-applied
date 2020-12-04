@@ -11,6 +11,7 @@ pub struct PointerMap {
 }
 
 impl PointerMap {
+    #[allow(unused)]
     pub fn reset(&mut self) {
         self.map.clear()
     }

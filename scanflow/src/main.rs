@@ -15,6 +15,9 @@ use value_scanner::ValueScanner;
 mod pointer_map;
 use pointer_map::PointerMap;
 
+mod disasm;
+use disasm::Disasm;
+
 fn main() -> Result<()> {
     TermLogger::init(LevelFilter::Info, Config::default(), TerminalMode::Mixed).unwrap();
 
@@ -43,6 +46,13 @@ fn main() -> Result<()> {
 
     let mut typename: Option<String> = None;
     let mut buf_len = 0;
+
+    let mut disasm = Disasm::default();
+    disasm.collect_globals(&mut process)?;
+
+    for (&instr, &global) in disasm.map().iter().filter(|(_, &o)| o == 0x4f8040.into()) {
+        println!("{:x} -> {:x}", instr, global);
+    }
 
     while let Ok(line) = get_line() {
         match line.trim() {
