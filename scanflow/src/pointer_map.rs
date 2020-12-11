@@ -1,5 +1,5 @@
 use memflow::error::*;
-use memflow::mem::{VirtualMemory};
+use memflow::mem::VirtualMemory;
 use memflow::types::{size, Address};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -54,39 +54,77 @@ impl PointerMap {
         Ok(())
     }
 
-    pub fn walk_down_range(
+    pub fn map(&self) -> &BTreeMap<Address, Address> {
+        &self.map
+    }
+
+    fn walk_down_range(
         &self,
         addr: Address,
         lrange: usize,
         urange: usize,
-        level: usize,
         max_levels: usize,
+        level: usize,
+        search_for: &[Address],
+        out: &mut Vec<(Address, Vec<(Address, isize)>)>,
+        tmp: &mut Vec<(Address, isize)>,
     ) {
         let min = Address::from(addr.as_u64().saturating_sub(lrange as _));
         let max = Address::from(addr.as_u64().saturating_add(urange as _));
 
-        for _ in 0..level {
-            print!("===>");
+        for &m in search_for.iter().filter(|&&m| m >= min && m <= max) {
+            let off = signed_diff(m, addr);
+            let mut cloned = tmp.clone();
+            cloned.push((addr, off));
+            out.push((m, cloned));
         }
 
-        println!("={:x}:", addr);
-
-        for (&k, &v) in self.map.range((Included(&min), Included(&max))) {
-            for _ in 0..level {
-                print!("--->");
-            }
-
-            if k < addr {
-                print!("(-{:x})", addr - k);
-            } else {
-                print!("(+{:x})", k - addr);
-            }
-
-            println!(" {:x}=>{:x}", k, v);
-
-            if level < max_levels {
-                self.walk_down_range(v, lrange, urange, level + 1, max_levels);
+        if level < max_levels {
+            for (&k, &v) in self.map.range((Included(&min), Included(&max))) {
+                let off = signed_diff(k, addr);
+                tmp.push((addr, off));
+                self.walk_down_range(
+                    v,
+                    lrange,
+                    urange,
+                    max_levels,
+                    level + 1,
+                    search_for,
+                    out,
+                    tmp,
+                );
+                tmp.pop();
             }
         }
     }
+
+    pub fn find_matches(
+        &self,
+        lrange: usize,
+        urange: usize,
+        max_depth: usize,
+        search_for: &[Address],
+    ) -> Vec<(Address, Vec<(Address, isize)>)> {
+        let mut matches = vec![];
+        for &k in self.map.keys() {
+            self.walk_down_range(
+                k,
+                lrange,
+                urange,
+                max_depth,
+                1,
+                search_for,
+                &mut matches,
+                &mut vec![],
+            );
+        }
+        matches
+    }
+}
+
+pub fn signed_diff(a: Address, b: Address) -> isize {
+    a.as_u64()
+        .checked_sub(b.as_u64())
+        .map(|a| a as isize)
+        .unwrap_or_else(|| -((b - a) as isize))
 }

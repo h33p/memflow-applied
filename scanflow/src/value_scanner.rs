@@ -1,5 +1,5 @@
 use memflow::error::*;
-use memflow::mem::{VirtualMemory};
+use memflow::mem::VirtualMemory;
 use memflow::types::{size, Address};
 
 #[derive(Default)]

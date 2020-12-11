@@ -1,6 +1,6 @@
 use memflow::connector::inventory::ConnectorInventory;
 use memflow::error::*;
-use memflow::mem::virt_mem::{VirtualMemory};
+use memflow::mem::virt_mem::VirtualMemory;
 
 use memflow_win32::win32::{Kernel, Win32Process};
 use memflow_win32::{Error, Result};
@@ -17,6 +17,9 @@ use pointer_map::PointerMap;
 
 mod disasm;
 use disasm::Disasm;
+
+#[macro_use]
+extern crate scan_fmt;
 
 fn main() -> Result<()> {
     TermLogger::init(LevelFilter::Info, Config::default(), TerminalMode::Mixed).unwrap();
@@ -50,15 +53,24 @@ fn main() -> Result<()> {
     let mut disasm = Disasm::default();
     disasm.collect_globals(&mut process)?;
 
-    for (&instr, &global) in disasm.map().iter().filter(|(_, &o)| o == 0x4f8040.into()) {
+    let mut pointer_map = PointerMap::default();
+
+    for (&instr, &global) in disasm.map().iter().filter(|(_, &o)| o == 0xa9770.into()) {
         println!("{:x} -> {:x}", instr, global);
     }
 
     while let Ok(line) = get_line() {
-        match line.trim() {
+        let line = line.trim();
+
+        let mut toks = line.splitn(2, ' ');
+        let (cmd, args) = (toks.next().unwrap_or(""), toks.next().unwrap_or(""));
+
+        match cmd {
             "quit" | "q" => break,
             "reset" | "r" => {
                 value_scanner.reset();
+                disasm.reset();
+                pointer_map.reset();
                 typename = None;
             }
             "print" | "p" => {
@@ -69,18 +81,56 @@ fn main() -> Result<()> {
                 }
             }
             "pointer_map" | "pm" => {
-                let mut pointer_map = PointerMap::default();
+                pointer_map.reset();
                 pointer_map.create_map(
                     &mut process.virt_mem,
                     process.proc_info.proc_arch.size_addr(),
                 )?;
-                let addr = 0x4f8040.into();
-                pointer_map.walk_down_range(addr, 0, 16, 0, 5);
             }
-            line => {
+            "offset_scan" | "os" => {
+                if let (Some(lrange), Some(urange), Some(max_depth), filter_addr) =
+                    scan_fmt_some!(args, "{} {} {} {x}", usize, usize, usize, [hex u64])
+                {
+                    if pointer_map.map().is_empty() {
+                        pointer_map.create_map(
+                            &mut process.virt_mem,
+                            process.proc_info.proc_arch.size_addr(),
+                        )?;
+                    }
+
+                    let matches = pointer_map.find_matches(
+                        lrange,
+                        urange,
+                        max_depth,
+                        value_scanner.matches(),
+                    );
+
+                    println!("Matches found: {}", matches.len());
+
+                    for (m, offsets) in matches.into_iter().filter(|(_, v)| {
+                        if let Some(a) = filter_addr {
+                            if let Some((s, _)) = v.first() {
+                                s.as_u64() == a
+                            } else {
+                                false
+                            }
+                        } else {
+                            true
+                        }
+                    }) {
+                        for (start, off) in offsets.into_iter() {
+                            print!("{:x} + ({}) => ", start, off);
+                        }
+                        println!("{:x}", m);
+                    }
+                } else {
+                    println!("usage: os {{lower range}} {{upper range}} {{max depth}}");
+                }
+            }
+            _ => {
                 if let Some((buf, t)) = parse_input(line, &typename) {
                     buf_len = buf.len();
-                    value_scanner.scan_for(&mut process.virt_mem, &buf);
+                    value_scanner.scan_for(&mut process.virt_mem, &buf)?;
                     print_matches(&value_scanner, &mut process.virt_mem, buf_len, &t)?;
                     typename = Some(t);
                 } else {
