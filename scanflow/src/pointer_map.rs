@@ -98,15 +98,16 @@ impl PointerMap {
         }
     }
 
-    pub fn find_matches(
+    pub fn find_matches_addrs(
         &self,
         lrange: usize,
         urange: usize,
         max_depth: usize,
         search_for: &[Address],
+        addrs: impl Iterator<Item = Address>,
     ) -> Vec<(Address, Vec<(Address, isize)>)> {
         let mut matches = vec![];
-        for &k in self.map.keys() {
+        for k in addrs {
             self.walk_down_range(
                 k,
                 lrange,
@@ -119,6 +120,22 @@ impl PointerMap {
             );
         }
         matches
+    }
+
+    pub fn find_matches(
+        &self,
+        lrange: usize,
+        urange: usize,
+        max_depth: usize,
+        search_for: &[Address],
+    ) -> Vec<(Address, Vec<(Address, isize)>)> {
+        self.find_matches_addrs(
+            lrange,
+            urange,
+            max_depth,
+            search_for,
+            self.map.keys().copied(),
+        )
     }
 }
 

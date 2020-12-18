@@ -7,6 +7,7 @@ use memflow_win32::{Error, Result};
 
 use simplelog::{Config, LevelFilter, TermLogger, TerminalMode};
 
+use std::collections::BTreeSet;
 use std::convert::TryInto;
 
 mod value_scanner;
@@ -46,18 +47,11 @@ fn main() -> Result<()> {
     //let replace_str = b"Hello world from memflow!";
 
     let mut value_scanner = ValueScanner::default();
-
     let mut typename: Option<String> = None;
     let mut buf_len = 0;
 
     let mut disasm = Disasm::default();
-    disasm.collect_globals(&mut process)?;
-
     let mut pointer_map = PointerMap::default();
-
-    for (&instr, &global) in disasm.map().iter().filter(|(_, &o)| o == 0xa9770.into()) {
-        println!("{:x} -> {:x}", instr, global);
-    }
 
     while let Ok(line) = get_line() {
         let line = line.trim();
@@ -87,9 +81,14 @@ fn main() -> Result<()> {
                     process.proc_info.proc_arch.size_addr(),
                 )?;
             }
+            "globals" | "g" => {
+                disasm.reset();
+                disasm.collect_globals(&mut process)?;
+                println!("Global variable references found: {:x}", disasm.map().len());
+            }
             "offset_scan" | "os" => {
-                if let (Some(lrange), Some(urange), Some(max_depth), filter_addr) =
-                    scan_fmt_some!(args, "{} {} {} {x}", usize, usize, usize, [hex u64])
+                if let (Some(use_di), Some(lrange), Some(urange), Some(max_depth), filter_addr) =
+                    scan_fmt_some!(args, "{} {} {} {} {x}", String, usize, usize, usize, [hex u64])
                 {
                     if pointer_map.map().is_empty() {
                         pointer_map.create_map(
@@ -98,12 +97,21 @@ fn main() -> Result<()> {
                         )?;
                     }
 
-                    let matches = pointer_map.find_matches(
-                        lrange,
-                        urange,
-                        max_depth,
-                        value_scanner.matches(),
-                    );
+                    let matches = if use_di == "y" {
+                        if disasm.map().is_empty() {
+                            disasm.collect_globals(&mut process)?;
+                        }
+                        let set: BTreeSet<_> = disasm.map().values().copied().collect();
+                        pointer_map.find_matches_addrs(
+                            lrange,
+                            urange,
+                            max_depth,
+                            value_scanner.matches(),
+                            set.into_iter(),
+                        )
+                    } else {
+                        pointer_map.find_matches(lrange, urange, max_depth, value_scanner.matches())
+                    };
 
                     println!("Matches found: {}", matches.len());
 
@@ -124,7 +132,10 @@ fn main() -> Result<()> {
                         println!("{:x}", m);
                     }
                 } else {
-                    println!("usage: os {{lower range}} {{upper range}} {{max depth}}");
+                    println!(
+                        "usage: os {{y/[n]}} {{lower range}} {{upper range}} {{max
+                            depth}} ({{filter}})"
+                    );
                 }
             }
             _ => {
