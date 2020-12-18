@@ -10,3 +10,4 @@ This contains all code for the [memflow applied](https://www.youtube.com/watch?v
 6. [Pointer Map](https://youtu.be/DIB1wt6JRz4) ([code](https://github.com/h33p/memflow-applied/tree/5a4b792f659b7ad3c17932f4c825ae760357c8de))
 7. [Code Analysis](https://youtu.be/ViOj5Na6mZE) ([code](https://github.com/h33p/memflow-applied/tree/9abadecd5caf6c44ec4cbf418d577e1d1b37cfd8))
 8. [Cyberfind Values Through Pointers](https://youtu.be/rjoITP6rF5s) ([code](https://github.com/h33p/memflow-applied/tree/aba04ba14305d498a004fb462f8ebb9b78f5164f))
+9. [Dissassembler Gets A Job](https://youtu.be/eEqbA1yTn7M) ([code](https://github.com/h33p/memflow-applied/commit/aac7967b064f9e54318820ca22cf00532579ab03))
