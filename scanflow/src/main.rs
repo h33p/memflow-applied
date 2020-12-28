@@ -7,16 +7,16 @@ use memflow_win32::{Error, Result};
 
 use simplelog::{Config, LevelFilter, TermLogger, TerminalMode};
 
-use std::collections::BTreeSet;
 use std::convert::TryInto;
+use std::time::Instant;
 
-mod value_scanner;
+pub mod value_scanner;
 use value_scanner::ValueScanner;
 
-mod pointer_map;
+pub mod pointer_map;
 use pointer_map::PointerMap;
 
-mod disasm;
+pub mod disasm;
 use disasm::Disasm;
 
 #[macro_use]
@@ -97,35 +97,50 @@ fn main() -> Result<()> {
                         )?;
                     }
 
+                    let start = Instant::now();
+
                     let matches = if use_di == "y" {
                         if disasm.map().is_empty() {
                             disasm.collect_globals(&mut process)?;
                         }
-                        let set: BTreeSet<_> = disasm.map().values().copied().collect();
                         pointer_map.find_matches_addrs(
-                            lrange,
-                            urange,
+                            (lrange, urange),
                             max_depth,
-                            value_scanner.matches(),
-                            set.into_iter(),
+                            value_scanner.matches().iter().copied(),
+                            disasm.globals(),
                         )
                     } else {
-                        pointer_map.find_matches(lrange, urange, max_depth, value_scanner.matches())
+                        pointer_map.find_matches(
+                            (lrange, urange),
+                            max_depth,
+                            value_scanner.matches().iter().copied(),
+                        )
                     };
 
-                    println!("Matches found: {}", matches.len());
+                    println!(
+                        "Matches found: {} in {:.2}ms",
+                        matches.len(),
+                        start.elapsed().as_secs_f64() * 1000.0
+                    );
 
-                    for (m, offsets) in matches.into_iter().filter(|(_, v)| {
-                        if let Some(a) = filter_addr {
-                            if let Some((s, _)) = v.first() {
-                                s.as_u64() == a
+                    if matches.len() > 64 {
+                        println!("Printing first 64 matches");
+                    }
+                    for (m, offsets) in matches
+                        .into_iter()
+                        .filter(|(_, v)| {
+                            if let Some(a) = filter_addr {
+                                if let Some((s, _)) = v.first() {
+                                    s.as_u64() == a
+                                } else {
+                                    false
+                                }
                             } else {
-                                false
+                                true
                             }
-                        } else {
-                            true
-                        }
-                    }) {
+                        })
+                        .take(64)
+                    {
                         for (start, off) in offsets.into_iter() {
                             print!("{:x} + ({}) => ", start, off);
                         }

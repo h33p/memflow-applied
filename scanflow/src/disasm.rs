@@ -11,18 +11,23 @@ use std::collections::BTreeMap;
 #[derive(Default)]
 pub struct Disasm {
     map: BTreeMap<Address, Address>,
+    inverse_map: BTreeMap<Address, Vec<Address>>,
+    globals: Vec<Address>,
 }
 
 impl Disasm {
     #[allow(unused)]
     pub fn reset(&mut self) {
         self.map.clear();
+        self.inverse_map.clear();
+        self.globals.clear();
     }
 
     pub fn collect_globals(
         &mut self,
         process: &mut Win32Process<impl VirtualMemory>,
     ) -> Result<()> {
+        self.reset();
         let modules = process.module_list()?;
 
         let mut image = vec![0; size::kb(128)];
@@ -81,12 +86,24 @@ impl Disasm {
             }
         }
 
-        println!("GLOBALS {:x}", self.map.len());
+        for (&k, &v) in &self.map {
+            self.inverse_map.entry(v).or_default().push(k);
+        }
+
+        self.globals = self.inverse_map.keys().copied().collect();
 
         Ok(())
     }
 
     pub fn map(&self) -> &BTreeMap<Address, Address> {
         &self.map
+    }
+
+    pub fn inverse_map(&self) -> &BTreeMap<Address, Vec<Address>> {
+        &self.inverse_map
+    }
+
+    pub fn globals(&self) -> &Vec<Address> {
+        &self.globals
     }
 }

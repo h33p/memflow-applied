@@ -8,15 +8,21 @@ use std::ops::Bound::Included;
 #[derive(Default)]
 pub struct PointerMap {
     map: BTreeMap<Address, Address>,
+    inverse_map: BTreeMap<Address, Vec<Address>>,
+    pointers: Vec<Address>,
 }
 
 impl PointerMap {
     #[allow(unused)]
     pub fn reset(&mut self) {
-        self.map.clear()
+        self.map.clear();
+        self.inverse_map.clear();
+        self.pointers.clear();
     }
 
     pub fn create_map<T: VirtualMemory>(&mut self, mem: &mut T, size_addr: usize) -> Result<()> {
+        self.reset();
+
         let mem_map = mem.virt_page_map_range(size::mb(16), Address::null(), (1u64 << 47).into());
 
         let mut buf = vec![0; 0x1000 + size_addr - 1];
@@ -49,7 +55,11 @@ impl PointerMap {
             }
         }
 
-        println!("Map size: {:x}", self.map.len());
+        for (&k, &v) in &self.map {
+            self.inverse_map.entry(v).or_default().push(k);
+        }
+
+        self.pointers = self.map.keys().copied().collect();
 
         Ok(())
     }
@@ -58,41 +68,74 @@ impl PointerMap {
         &self.map
     }
 
+    pub fn inverse_map(&self) -> &BTreeMap<Address, Vec<Address>> {
+        &self.inverse_map
+    }
+
+    pub fn pointers(&self) -> &Vec<Address> {
+        &self.pointers
+    }
+
     fn walk_down_range(
         &self,
         addr: Address,
-        lrange: usize,
-        urange: usize,
+        (lrange, urange): (usize, usize),
         max_levels: usize,
         level: usize,
-        search_for: &[Address],
+        startpoints: &[Address],
         out: &mut Vec<(Address, Vec<(Address, isize)>)>,
-        tmp: &mut Vec<(Address, isize)>,
+        (final_addr, tmp): (Address, &mut Vec<(Address, isize)>),
     ) {
-        let min = Address::from(addr.as_u64().saturating_sub(lrange as _));
-        let max = Address::from(addr.as_u64().saturating_add(urange as _));
+        let min = Address::from(addr.as_u64().saturating_sub(urange as _));
+        let max = Address::from(addr.as_u64().saturating_add(lrange as _));
 
-        for &m in search_for.iter().filter(|&&m| m >= min && m <= max) {
-            let off = signed_diff(m, addr);
-            let mut cloned = tmp.clone();
-            cloned.push((addr, off));
-            out.push((m, cloned));
+        // Find the lower bound
+        let idx = startpoints.binary_search(&min).unwrap_or_else(|x| x);
+
+        let mut iter = startpoints
+            .iter()
+            .skip(idx)
+            .copied()
+            .take_while(|&v| v <= max);
+
+        // Pick next match
+        let mut m = iter.next();
+
+        // Go through the rest
+        for e in iter {
+            let off = signed_diff(addr, e).abs();
+            // If abs offset is smaller, overwrite
+            // < biasses more towards positive end
+            if off < signed_diff(addr, m.unwrap()).abs() {
+                m = Some(e);
+            }
         }
 
+        // Push match if found
+        if let Some(e) = m {
+            let off = signed_diff(addr, e);
+            let mut cloned = tmp.clone();
+            cloned.push((e, off));
+            cloned.reverse();
+            out.push((final_addr, cloned));
+        }
+
+        // Recurse downwards if possible
         if level < max_levels {
-            for (&k, &v) in self.map.range((Included(&min), Included(&max))) {
-                let off = signed_diff(k, addr);
-                tmp.push((addr, off));
-                self.walk_down_range(
-                    v,
-                    lrange,
-                    urange,
-                    max_levels,
-                    level + 1,
-                    search_for,
-                    out,
-                    tmp,
-                );
+            for (&k, vec) in self.inverse_map.range((Included(&min), Included(&max))) {
+                let off = signed_diff(addr, k);
+                tmp.push((k, off));
+                for &v in vec {
+                    self.walk_down_range(
+                        v,
+                        (lrange, urange),
+                        max_levels,
+                        level + 1,
+                        startpoints,
+                        out,
+                        (final_addr, tmp),
+                    );
+                }
                 tmp.pop();
             }
         }
@@ -100,23 +143,21 @@ impl PointerMap {
 
     pub fn find_matches_addrs(
         &self,
-        lrange: usize,
-        urange: usize,
+        range: (usize, usize),
         max_depth: usize,
-        search_for: &[Address],
-        addrs: impl Iterator<Item = Address>,
+        search_for: impl Iterator<Item = Address>,
+        entry_points: &[Address],
     ) -> Vec<(Address, Vec<(Address, isize)>)> {
         let mut matches = vec![];
-        for k in addrs {
+        for m in search_for {
             self.walk_down_range(
-                k,
-                lrange,
-                urange,
+                m,
+                range,
                 max_depth,
                 1,
-                search_for,
+                entry_points,
                 &mut matches,
-                &mut vec![],
+                (m, &mut vec![]),
             );
         }
         matches
@@ -124,18 +165,11 @@ impl PointerMap {
 
     pub fn find_matches(
         &self,
-        lrange: usize,
-        urange: usize,
+        range: (usize, usize),
         max_depth: usize,
-        search_for: &[Address],
+        search_for: impl Iterator<Item = Address>,
     ) -> Vec<(Address, Vec<(Address, isize)>)> {
-        self.find_matches_addrs(
-            lrange,
-            urange,
-            max_depth,
-            search_for,
-            self.map.keys().copied(),
-        )
+        self.find_matches_addrs(range, max_depth, search_for, &self.pointers)
     }
 }
 
