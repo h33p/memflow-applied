@@ -11,3 +11,5 @@ This contains all code for the [memflow applied](https://www.youtube.com/watch?v
 7. [Code Analysis](https://youtu.be/ViOj5Na6mZE) ([code](https://github.com/h33p/memflow-applied/tree/9abadecd5caf6c44ec4cbf418d577e1d1b37cfd8))
 8. [Cyberfind Values Through Pointers](https://youtu.be/rjoITP6rF5s) ([code](https://github.com/h33p/memflow-applied/tree/aba04ba14305d498a004fb462f8ebb9b78f5164f))
 9. [Dissassembler Gets A Job](https://youtu.be/eEqbA1yTn7M) ([code](https://github.com/h33p/memflow-applied/commit/aac7967b064f9e54318820ca22cf00532579ab03))
+10. [Flipping Everything Around](https://youtu.be/T16OwNzduC0) ([code](https://github.com/h33p/memflow-applied/commit/2a17e1e457d1a980e7b1becc1056dfe9bee0db6e))
+11. ["Force Value"](https://youtu.be/Lf3MJCg72GA) ([code](https://github.com/h33p/memflow-applied/commit/809ff5c415ccee5496a449f8fef1d6dd08461a7a) includes a bit of EP12)
