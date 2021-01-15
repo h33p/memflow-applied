@@ -22,8 +22,12 @@ use pointer_map::PointerMap;
 pub mod disasm;
 use disasm::Disasm;
 
+pub mod pbar;
+
 #[macro_use]
 extern crate scan_fmt;
+
+pub const MAX_PRINT: usize = 32;
 
 fn main() -> Result<()> {
     TermLogger::init(LevelFilter::Info, Config::default(), TerminalMode::Mixed).unwrap();
@@ -45,9 +49,6 @@ fn main() -> Result<()> {
         .ok_or(Error::Other("Could not find the module"))?;
 
     println!("{:#?}", process_mod);
-
-    //let target_str = b"There is nothing here!!!!";
-    //let replace_str = b"Hello world from memflow!";
 
     let mut value_scanner = ValueScanner::default();
     let mut typename: Option<String> = None;
@@ -109,14 +110,14 @@ fn main() -> Result<()> {
                         pointer_map.find_matches_addrs(
                             (lrange, urange),
                             max_depth,
-                            value_scanner.matches().iter().copied(),
+                            value_scanner.matches(),
                             disasm.globals(),
                         )
                     } else {
                         pointer_map.find_matches(
                             (lrange, urange),
                             max_depth,
-                            value_scanner.matches().iter().copied(),
+                            value_scanner.matches(),
                         )
                     };
 
@@ -126,8 +127,8 @@ fn main() -> Result<()> {
                         start.elapsed().as_secs_f64() * 1000.0
                     );
 
-                    if matches.len() > 64 {
-                        println!("Printing first 64 matches");
+                    if matches.len() > MAX_PRINT {
+                        println!("Printing first {} matches", MAX_PRINT);
                     }
                     for (m, offsets) in matches
                         .into_iter()
@@ -142,7 +143,7 @@ fn main() -> Result<()> {
                                 true
                             }
                         })
-                        .take(64)
+                        .take(MAX_PRINT)
                     {
                         for (start, off) in offsets.into_iter() {
                             print!("{:x} + ({}) => ", start, off);

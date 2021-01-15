@@ -1,3 +1,4 @@
+use crate::pbar::PBar;
 use memflow::error::*;
 use memflow::mem::VirtualMemory;
 use memflow::types::{size, Address};
@@ -26,9 +27,12 @@ impl PointerMap {
         let mem_map = mem.virt_page_map_range(size::mb(16), Address::null(), (1u64 << 47).into());
 
         let mut buf = vec![0; 0x1000 + size_addr - 1];
+        let mut pb = PBar::new(
+            mem_map.iter().map(|(_, size)| *size as u64).sum::<u64>(),
+            true,
+        );
 
         for &(addr, size) in &mem_map {
-            println!("{:x} {:x}", addr, size);
             for off in (0..size).step_by(0x1000) {
                 mem.virt_read_raw_into(addr + off, buf.as_mut_slice())
                     .data_part()?;
@@ -52,6 +56,8 @@ impl PointerMap {
                         self.map.insert(addr, out_addr);
                     }
                 }
+
+                pb.add(0x1000);
             }
         }
 
@@ -60,6 +66,8 @@ impl PointerMap {
         }
 
         self.pointers = self.map.keys().copied().collect();
+
+        pb.finish();
 
         Ok(())
     }
@@ -85,6 +93,8 @@ impl PointerMap {
         startpoints: &[Address],
         out: &mut Vec<(Address, Vec<(Address, isize)>)>,
         (final_addr, tmp): (Address, &mut Vec<(Address, isize)>),
+        pb: &mut PBar,
+        (pb_start, pb_end): (f32, f32)
     ) {
         let min = Address::from(addr.as_u64().saturating_sub(urange as _));
         let max = Address::from(addr.as_u64().saturating_add(lrange as _));
@@ -122,10 +132,25 @@ impl PointerMap {
 
         // Recurse downwards if possible
         if level < max_levels {
+            let mut last = min;
             for (&k, vec) in self.inverse_map.range((Included(&min), Included(&max))) {
+                // Calculate the starting fraction
+                let frac_start = (last - min) as f32 / (max - min) as f32;
+                let new_start = pb_start + (pb_end - pb_start) * frac_start;
+
+                // Calculate the ending fraction
+                let frac_end = (k - min) as f32 / (max - min) as f32;
+                let new_end = pb_start + (pb_end - pb_start) * frac_end;
+
+                last = k;
+
                 let off = signed_diff(addr, k);
                 tmp.push((k, off));
-                for &v in vec {
+
+                // Calculate how much space each subitem uses in the fraction
+                let part = (new_end - new_start) / vec.len() as f32;
+
+                for (i, &v) in vec.iter().enumerate() {
                     self.walk_down_range(
                         v,
                         (lrange, urange),
@@ -134,9 +159,16 @@ impl PointerMap {
                         startpoints,
                         out,
                         (final_addr, tmp),
+                        pb,
+                        (new_start + part * i as f32,
+                         new_start + part * (i + 1) as f32)
                     );
                 }
                 tmp.pop();
+
+                if (new_end - pb_start) >= 0.00001 {
+                    pb.set((new_end * 100000.0).round() as u64);
+                }
             }
         }
     }
@@ -145,11 +177,16 @@ impl PointerMap {
         &self,
         range: (usize, usize),
         max_depth: usize,
-        search_for: impl Iterator<Item = Address>,
+        search_for: &[Address],
         entry_points: &[Address],
     ) -> Vec<(Address, Vec<(Address, isize)>)> {
         let mut matches = vec![];
-        for m in search_for {
+
+        let mut pb = PBar::new(100000, false);
+
+        let part = 1.0 / search_for.len() as f32;
+
+        for (i, &m) in search_for.iter().enumerate() {
             self.walk_down_range(
                 m,
                 range,
@@ -158,8 +195,14 @@ impl PointerMap {
                 entry_points,
                 &mut matches,
                 (m, &mut vec![]),
+                &mut pb,
+                (part * i as f32, part * (i + 1) as f32)
             );
+            pb.set((100000.0 * part * (i + 1) as f32).round() as u64);
         }
+
+        pb.finish();
+
         matches
     }
 
@@ -167,7 +210,7 @@ impl PointerMap {
         &self,
         range: (usize, usize),
         max_depth: usize,
-        search_for: impl Iterator<Item = Address>,
+        search_for: &[Address],
     ) -> Vec<(Address, Vec<(Address, isize)>)> {
         self.find_matches_addrs(range, max_depth, search_for, &self.pointers)
     }

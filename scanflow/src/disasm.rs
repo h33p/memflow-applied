@@ -3,6 +3,7 @@ use memflow::types::{size, Address};
 use memflow_win32::error::*;
 use memflow_win32::win32::Win32Process;
 
+use crate::pbar::PBar;
 use iced_x86::{Decoder, DecoderOptions};
 use pelite::PeFile;
 
@@ -34,6 +35,8 @@ impl Disasm {
 
         const CHUNK_SIZE: usize = size::mb(2);
         let mut bytes = vec![0; CHUNK_SIZE + 32];
+
+        let mut pb = PBar::new(modules.iter().map(|m| m.size as u64).sum::<u64>(), true);
 
         for m in modules.into_iter() {
             process
@@ -84,6 +87,8 @@ impl Disasm {
                     }
                 }
             }
+
+            pb.add(m.size as u64);
         }
 
         for (&k, &v) in &self.map {
@@ -91,6 +96,8 @@ impl Disasm {
         }
 
         self.globals = self.inverse_map.keys().copied().collect();
+
+        pb.finish();
 
         Ok(())
     }
