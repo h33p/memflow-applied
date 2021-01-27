@@ -94,7 +94,7 @@ impl PointerMap {
         out: &mut Vec<(Address, Vec<(Address, isize)>)>,
         (final_addr, tmp): (Address, &mut Vec<(Address, isize)>),
         pb: &mut PBar,
-        (pb_start, pb_end): (f32, f32)
+        (pb_start, pb_end): (f32, f32),
     ) {
         let min = Address::from(addr.as_u64().saturating_sub(urange as _));
         let max = Address::from(addr.as_u64().saturating_add(lrange as _));
@@ -160,8 +160,10 @@ impl PointerMap {
                         out,
                         (final_addr, tmp),
                         pb,
-                        (new_start + part * i as f32,
-                         new_start + part * (i + 1) as f32)
+                        (
+                            new_start + part * i as f32,
+                            new_start + part * (i + 1) as f32,
+                        ),
                     );
                 }
                 tmp.pop();
@@ -196,7 +198,7 @@ impl PointerMap {
                 &mut matches,
                 (m, &mut vec![]),
                 &mut pb,
-                (part * i as f32, part * (i + 1) as f32)
+                (part * i as f32, part * (i + 1) as f32),
             );
             pb.set((100000.0 * part * (i + 1) as f32).round() as u64);
         }

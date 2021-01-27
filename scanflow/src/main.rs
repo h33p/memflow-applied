@@ -22,6 +22,9 @@ use pointer_map::PointerMap;
 pub mod disasm;
 use disasm::Disasm;
 
+pub mod sigmaker;
+use sigmaker::Sigmaker;
+
 pub mod pbar;
 
 #[macro_use]
@@ -89,6 +92,21 @@ fn main() -> Result<()> {
                 disasm.reset();
                 disasm.collect_globals(&mut process)?;
                 println!("Global variable references found: {:x}", disasm.map().len());
+            }
+            "sigmaker" | "s" => {
+                if let Some(addr) = scan_fmt_some!(args, "{x}", [hex u64]) {
+                    match Sigmaker::find_sigs(&mut process, &disasm, addr.into()) {
+                        Ok(sigs) => {
+                            println!("Found signatures:");
+                            for sig in sigs {
+                                println!("{}", sig);
+                            }
+                        }
+                        Err(e) => println!("sigmaker error {}", e),
+                    }
+                } else {
+                    println!("Usage: s {{addr}}");
+                }
             }
             "offset_scan" | "os" => {
                 if let (Some(use_di), Some(lrange), Some(urange), Some(max_depth), filter_addr) =
