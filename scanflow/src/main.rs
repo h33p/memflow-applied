@@ -30,7 +30,7 @@ pub mod pbar;
 #[macro_use]
 extern crate scan_fmt;
 
-pub const MAX_PRINT: usize = 32;
+pub const MAX_PRINT: usize = 16;
 
 fn main() -> Result<()> {
     TermLogger::init(LevelFilter::Info, Config::default(), TerminalMode::Mixed).unwrap();
@@ -209,7 +209,7 @@ pub fn print_matches<V: VirtualMemory>(
 ) -> Result<()> {
     println!("Matches found: {}", value_scanner.matches().len());
 
-    for &m in value_scanner.matches() {
+    for &m in value_scanner.matches().iter().take(MAX_PRINT) {
         let mut buf = vec![0; buf_len];
         virt_mem.virt_read_raw_into(m, &mut buf).data_part()?;
         println!(
