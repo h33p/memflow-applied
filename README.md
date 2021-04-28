@@ -15,3 +15,5 @@ This contains all code for the [memflow applied](https://www.youtube.com/watch?v
 11. ["Force Value"](https://youtu.be/Lf3MJCg72GA) ([code](https://github.com/h33p/memflow-applied/commit/809ff5c415ccee5496a449f8fef1d6dd08461a7a) includes a bit of EP12)
 12. ["Progress bars and all the integers"](https://youtu.be/qu-ZP_LEgy0) ([code](https://github.com/h33p/memflow-applied/commit/0e6ad263edf89859ff11eaeb34d70bf65ce2bd05))
 13. ["Sigmaker"](https://youtu.be/OjURRZE1HWk) ([code](https://github.com/h33p/memflow-applied/commit/b8354667ac74d65166e417be82c57537ed0eb579))
+14. ["The Only Multithreading Video You'll Ever Need"](https://youtu.be/32VKrLUQFXg) ([code](https://github.com/h33p/memflow-applied/commit/79a00e1af32ea8c026b0c11dad70306f5e0bc12a))
+14. ["[EXTENDED] Multithreading in depth"](https://youtu.be/l3OJ2mUlxus) ([code](https://github.com/h33p/memflow-applied/commit/8448abcebe102eccc19cb17aba1706583f69c12d))
