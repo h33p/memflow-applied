@@ -22,42 +22,53 @@ impl ValueScanner {
             self.mem_map =
                 mem.virt_page_map_range(size::mb(16), Address::null(), (1u64 << 47).into());
 
-            /*let pb = PBar::new(
+            let pb = PBar::new(
                 self.mem_map
                     .iter()
                     .map(|(_, size)| *size as u64)
                     .sum::<u64>(),
                 true,
-            );*/
+            );
 
             let ctx = ThreadLocalCtx::new(move || mem.clone());
             let ctx_buf = ThreadLocalCtx::new(|| vec![0; 0x1000 + data.len() - 1]);
 
-            self.matches.par_extend(
-                self.mem_map.par_iter().flat_map(|&(addr, size)| {
-                    (0..size).into_par_iter().step_by(0x1000).filter_map(|off| {
+            self.matches
+                .par_extend(self.mem_map.par_iter().flat_map(|&(addr, size)| {
+                    (0..size)
+                        .into_par_iter()
+                        .step_by(0x1000)
+                        .filter_map(|off| {
+                            let mut mem = unsafe { ctx.get() };
+                            let mut buf = unsafe { ctx_buf.get() };
 
-                        let mut mem = unsafe { ctx.get() };
-                        let mut buf = unsafe { ctx_buf.get() };
+                            mem.virt_read_raw_into(addr + off, buf.as_mut_slice())
+                                .data_part()
+                                .ok()?;
 
-                        mem.virt_read_raw_into(addr + off, buf.as_mut_slice())
-                            .data_part().ok()?;
+                            pb.add(0x1000);
 
-                        //pb.add(0x1000);
+                            let ret = buf
+                                .windows(data.len())
+                                .enumerate()
+                                .filter_map(|(o, buf)| {
+                                    if buf == data {
+                                        Some(addr + off + o)
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect::<Vec<_>>()
+                                .into_par_iter();
 
-                        let ret = buf.windows(data.len()).enumerate().filter_map(|(o, buf)| {
-                            if buf == data {
-                                Some(addr + off + o)
-                            } else {
-                                None
-                            }
-                        }).collect::<Vec<_>>().into_par_iter();
-
-                        Some(ret)
-                    }).flatten().collect::<Vec<_>>().into_par_iter()
+                            Some(ret)
+                        })
+                        .flatten()
+                        .collect::<Vec<_>>()
+                        .into_par_iter()
                 }));
 
-            //pb.finish();
+            pb.finish();
         } else {
             const CHUNK_SIZE: usize = 0x100;
 
@@ -81,7 +92,7 @@ impl ValueScanner {
 
                     std::mem::drop(batcher);
 
-                    //pb.add(CHUNK_SIZE as u64);
+                    pb.add(chunk.len() as u64);
 
                     chunk
                         .iter()
@@ -90,7 +101,7 @@ impl ValueScanner {
                         .collect::<Vec<_>>()
                         .into_par_iter()
                 }));
-            //pb.finish();
+            pb.finish();
         }
 
         Ok(())

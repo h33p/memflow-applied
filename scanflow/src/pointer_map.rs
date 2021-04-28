@@ -2,6 +2,8 @@ use crate::pbar::PBar;
 use memflow::error::*;
 use memflow::mem::VirtualMemory;
 use memflow::types::{size, Address};
+use rayon::prelude::*;
+use rayon_tlsctx::ThreadLocalCtx;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::ops::Bound::Included;
@@ -21,45 +23,71 @@ impl PointerMap {
         self.pointers.clear();
     }
 
-    pub fn create_map<T: VirtualMemory>(&mut self, mem: &mut T, size_addr: usize) -> Result<()> {
+    pub fn create_map<T: VirtualMemory + Clone>(
+        &mut self,
+        mem: &mut T,
+        size_addr: usize,
+    ) -> Result<()> {
         self.reset();
 
         let mem_map = mem.virt_page_map_range(size::mb(16), Address::null(), (1u64 << 47).into());
 
-        let mut buf = vec![0; 0x1000 + size_addr - 1];
-        let mut pb = PBar::new(
+        let pb = PBar::new(
             mem_map.iter().map(|(_, size)| *size as u64).sum::<u64>(),
             true,
         );
 
-        for &(addr, size) in &mem_map {
-            for off in (0..size).step_by(0x1000) {
-                mem.virt_read_raw_into(addr + off, buf.as_mut_slice())
-                    .data_part()?;
+        let ctx = ThreadLocalCtx::new(move || mem.clone());
+        let ctx_buf = ThreadLocalCtx::new(|| vec![0; 0x1000 + size_addr - 1]);
 
-                for (o, buf) in buf.windows(size_addr).enumerate() {
-                    let addr = addr + off + o;
-                    let mut arr = [0; 8];
-                    // TODO: Fix for Big Endian
-                    arr[0..buf.len()].copy_from_slice(buf);
-                    let out_addr = Address::from(u64::from_le_bytes(arr));
-                    if mem_map
-                        .binary_search_by(|&(a, s)| {
-                            if out_addr >= a && out_addr < a + s {
-                                Ordering::Equal
-                            } else {
-                                a.cmp(&out_addr)
-                            }
-                        })
-                        .is_ok()
-                    {
-                        self.map.insert(addr, out_addr);
-                    }
-                }
+        self.map
+            .par_extend(mem_map.par_iter().flat_map(|&(addr, size)| {
+                (0..size)
+                    .into_par_iter()
+                    .step_by(0x1000)
+                    .filter_map(|off| {
+                        let mut mem = unsafe { ctx.get() };
+                        let mut buf = unsafe { ctx_buf.get() };
 
-                pb.add(0x1000);
-            }
-        }
+                        mem.virt_read_raw_into(addr + off, buf.as_mut_slice())
+                            .data_part()
+                            .ok()?;
+
+                        pb.add(0x1000);
+
+                        let ret = buf
+                            .windows(size_addr)
+                            .enumerate()
+                            .filter_map(|(o, buf)| {
+                                let addr = addr + off + o;
+                                let mut arr = [0; 8];
+                                // TODO: Fix for Big Endian
+                                arr[0..buf.len()].copy_from_slice(buf);
+                                let out_addr = Address::from(u64::from_le_bytes(arr));
+                                if mem_map
+                                    .binary_search_by(|&(a, s)| {
+                                        if out_addr >= a && out_addr < a + s {
+                                            Ordering::Equal
+                                        } else {
+                                            a.cmp(&out_addr)
+                                        }
+                                    })
+                                    .is_ok()
+                                {
+                                    Some((addr, out_addr))
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                            .into_par_iter();
+
+                        Some(ret)
+                    })
+                    .flatten()
+                    .collect::<Vec<_>>()
+                    .into_par_iter()
+            }));
 
         for (&k, &v) in &self.map {
             self.inverse_map.entry(v).or_default().push(k);
@@ -93,7 +121,7 @@ impl PointerMap {
         startpoints: &[Address],
         out: &mut Vec<(Address, Vec<(Address, isize)>)>,
         (final_addr, tmp): (Address, &mut Vec<(Address, isize)>),
-        pb: &mut PBar,
+        pb: &PBar,
         (pb_start, pb_end): (f32, f32),
     ) {
         let min = Address::from(addr.as_u64().saturating_sub(urange as _));
@@ -184,11 +212,13 @@ impl PointerMap {
     ) -> Vec<(Address, Vec<(Address, isize)>)> {
         let mut matches = vec![];
 
-        let mut pb = PBar::new(100000, false);
+        let pb = PBar::new(100000, false);
 
         let part = 1.0 / search_for.len() as f32;
 
-        for (i, &m) in search_for.iter().enumerate() {
+        matches.par_extend(search_for.par_iter().enumerate().flat_map(|(i, &m)| {
+            let mut matches = vec![];
+
             self.walk_down_range(
                 m,
                 range,
@@ -197,11 +227,14 @@ impl PointerMap {
                 entry_points,
                 &mut matches,
                 (m, &mut vec![]),
-                &mut pb,
+                &pb,
                 (part * i as f32, part * (i + 1) as f32),
             );
+
             pb.set((100000.0 * part * (i + 1) as f32).round() as u64);
-        }
+
+            matches.into_par_iter()
+        }));
 
         pb.finish();
 
